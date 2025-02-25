@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мини-игра в Telegram</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+            display: block;
+            margin: 0 auto;
+        }
+        #leaderboard {
+            margin-top: 20px;
+            text-align: center;
+        }
+        #user-info {
+            text-align: center;
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="user-info"></div>
+    <canvas id="gameCanvas" width="400" height="300"></canvas>
+    <div id="leaderboard">
+        <h2>Таблица лидеров</h2>
+        <ul id="leaderboard-list"></ul>
+    </div>
+
+    <!-- Подключаем Telegram Web Apps API -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script>
+        // Получаем элементы страницы
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const leaderboardList = document.getElementById('leaderboard-list');
+        const userInfoDiv = document.getElementById('user-info');
+
+        // Переменные для игры
+        let ballX = 200; // Начальная позиция мяча по X
+        let ballY = 250; // Начальная позиция мяча по Y
+        let goalkeeperX = 175; // Позиция вратаря
+        let score = 0; // Счет игрока
+        let username = 'Гость'; // Имя по умолчанию
+
+        // Создаём изображение мяча
+        function createBallImage() {
+            const ballCanvas = document.createElement('canvas');
+            ballCanvas.width = 20;
+            ballCanvas.height = 20;
+            const ballCtx = ballCanvas.getContext('2d');
+            ballCtx.beginPath();
+            ballCtx.arc(10, 10, 10, 0, Math.PI * 2); // Круглый мяч
+            ballCtx.fillStyle = 'white';
+            ballCtx.fill();
+            ballCtx.strokeStyle = 'black';
+            ballCtx.stroke();
+            return ballCanvas;
+        }
+
+        // Создаём изображение вратаря
+        function createGoalkeeperImage() {
+            const gkCanvas = document.createElement('canvas');
+            gkCanvas.width = 50;
+            gkCanvas.height = 100;
+            const gkCtx = gkCanvas.getContext('2d');
+            // Тело вратаря (прямоугольник)
+            gkCtx.fillStyle = 'blue';
+            gkCtx.fillRect(10, 20, 30, 60);
+            // Голова
+            gkCtx.beginPath();
+            gkCtx.arc(25, 10, 10, 0, Math.PI * 2);
+            gkCtx.fillStyle = 'beige';
+            gkCtx.fill();
+            return gkCanvas;
+        }
+
+        // Создаём изображение ворот
+        function createGoalImage() {
+            const goalCanvas = document.createElement('canvas');
+            goalCanvas.width = 200;
+            goalCanvas.height = 150;
+            const goalCtx = goalCanvas.getContext('2d');
+            // Ворота (прямоугольник с сеткой)
+            goalCtx.strokeStyle = 'gray';
+            goalCtx.lineWidth = 5;
+            goalCtx.strokeRect(10, 10, 180, 130);
+            // Сетка (простые линии)
+            goalCtx.lineWidth = 1;
+            for (let i = 20; i < 180; i += 20) {
+                goalCtx.beginPath();
+                goalCtx.moveTo(i, 10);
+                goalCtx.lineTo(i, 140);
+                goalCtx.stroke();
+            }
+            for (let i = 20; i < 140; i += 20) {
+                goalCtx.beginPath();
+                goalCtx.moveTo(10, i);
+                goalCtx.lineTo(190, i);
+                goalCtx.stroke();
+            }
+            return goalCanvas;
+        }
+
+        // Инициализируем изображения
+        const ballImg = createBallImage();
+        const goalkeeperImg = createGoalkeeperImage();
+        const goalImg = createGoalImage();
+
+        // Получаем данные пользователя из Telegram
+        window.Telegram.WebApp.ready();
+        const initData = window.Telegram.WebApp.initDataUnsafe;
+        if (initData.user) {
+            username = initData.user.username || initData.user.first_name;
+            userInfoDiv.textContent = `Привет, ${username}! Твой счет: ${score}`;
+        } else {
+            userInfoDiv.textContent = `Привет, Гость! Твой счет: ${score}`;
+        }
+
+        // Функция рисования игры
+        function drawGame() {
+            // Очищаем холст
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // Рисуем ворота
+            ctx.drawImage(goalImg, 100, 50);
+            // Рисуем вратаря
+            ctx.drawImage(goalkeeperImg, goalkeeperX, 100);
+            // Рисуем мяч
+            ctx.drawImage(ballImg, ballX, ballY);
+        }
+
+        // Логика удара по мячу
+        canvas.addEventListener('click', () => {
+            // Мяч "летит" к воротам
+            ballY = 150;
+            // Вратарь случайно двигается
+            goalkeeperX = Math.random() > 0.5 ? 150 : 200;
+            // Проверяем, попал ли игрок (50% шанс)
+            const isGoal = Math.random() > 0.5;
+            if (isGoal) {
+                score++;
+                alert('Гол! Твой счет: ' + score);
+                saveScore();
+            } else {
+                alert('Вратарь поймал мяч!');
+            }
+            // Возвращаем мяч в исходное положение
+            ballY = 250;
+            drawGame();
+            updateUserInfo();
+        });
+
+        // Сохранение счета в таблице лидеров
+        function saveScore() {
+            let leaderboard = JSON.parse(localStorage.getItem('leaderboard') || '[]');
+            leaderboard = leaderboard.filter(entry => entry.name !== username); // Удаляем старый результат
+            leaderboard.push({ name: username, score: score });
+            leaderboard.sort((a, b) => b.score - a.score); // Сортируем по убыванию
+            localStorage.setItem('leaderboard', JSON.stringify(leaderboard));
+            updateLeaderboard();
+        }
+
+        // Обновление таблицы лидеров
+        function updateLeaderboard() {
+            leaderboardList.innerHTML = '';
+            const leaderboard = JSON.parse(localStorage.getItem('leaderboard') || '[]');
+            leaderboard.slice(0, 5).forEach((entry, index) => { // Показываем топ-5
+                const li = document.createElement('li');
+                li.textContent = `${index + 1}. ${entry.name} - ${entry.score}`;
+                leaderboardList.appendChild(li);
+            });
+        }
+
+        // Обновление информации о пользователе
+        function updateUserInfo() {
+            userInfoDiv.textContent = `Привет, ${username}! Твой счет: ${score}`;
+        }
+
+        // Инициализация игры
+        drawGame();
+        updateLeaderboard();
+    </script>
+</body>
+</html>
